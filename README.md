@@ -22,7 +22,7 @@ The YouTube Video Downloader Application is a Python-based desktop application t
 
 1. **Clone the Repository:**
 
-git clone https://github.com/your-username/youtube-video-downloader.git
+git clone https://github.com/WinterJackson/Yikes-YTD.git
 cd youtube-video-downloader
 
 2. **Install Dependencies:**
