@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/home/kuzzi/Yikes-YTD/venv"
+VIRTUAL_ENV="/home/kuzzi/Dev/C O D E/My Projects/Yikes YTD Files/Yikes-YTD/venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

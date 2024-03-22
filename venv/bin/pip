@@ -1,4 +1,6 @@
-#!/home/kuzzi/Yikes-YTD/venv/bin/python3
+#!/bin/sh
+'''exec' "/home/kuzzi/Dev/C O D E/My Projects/Yikes YTD Files/Yikes-YTD/venv/bin/python3" "$0" "$@"
+' '''
 # -*- coding: utf-8 -*-
 import re
 import sys

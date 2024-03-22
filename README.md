@@ -51,6 +51,11 @@ python app.py
 4. **Error Handling:**
 - If an error occurs during the download process, an informative error message will be displayed to assist with troubleshooting.
 
+## Screenshots
+
+![Screenshot 1](./images/yikesdark.png)
+![Screenshot 2](./images/yikeslight.png)
+
 ## Contributing
 
 Contributions to Yikes YouTube Video Downloader Application are welcome! To contribute:
