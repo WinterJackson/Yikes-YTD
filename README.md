@@ -1,5 +1,10 @@
 # Yikes YouTube Downloader
 
+## Screenshots
+
+![Screenshot 1](./images/darkfront.png)
+![Screenshot 2](./images/lightfront.png)
+
 ## Overview
 
 The YouTube Video Downloader Application is a Python-based desktop application that allows users to easily download YouTube videos and playlists for offline viewing. It provides a simple and intuitive graphical user interface (GUI) for fetching video information, selecting desired formats, and initiating the download process. The application utilizes the `youtube_dl` library for interacting with the YouTube API and handling video downloads.
