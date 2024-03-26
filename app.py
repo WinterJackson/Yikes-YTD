@@ -35,7 +35,7 @@ root.minsize(745, 720)
 root.maxsize(1145, 920)
 
 # Path to icon file
-icon_path = "images/icon.png" 
+icon_path = "app-images/icon.png" 
 
 # Load PNG image
 icon_image = PhotoImage(file=icon_path)
@@ -188,8 +188,8 @@ logo_frame = ttk.Frame(home_content_frame)
 logo_frame.pack(pady=100) 
 
 # Logo
-logo_image_dark = "images/logo-dark.png"
-logo_image_light = "images/logo-light.png"
+logo_image_dark = "app-images/logo-dark.png"
+logo_image_light = "app-images/logo-light.png"
 logo_path = logo_image_dark if mode == "dark" else logo_image_light
 logo_image = PhotoImage(file=logo_path)
 logo_label = ttk.Label(logo_frame, image=logo_image, borderwidth=0)
