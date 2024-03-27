@@ -2,9 +2,9 @@
 
 ## Screenshots
 
-<div style="display: flex; flex-direction: row;">
-  <img src="./app-images/single-dwdr.png" alt="Screenshot 1" style="margin-right: 10px;">
-  <img src="./app-images/single-dwl.png" alt="Screenshot 2">
+<div style="display: flex; justify-content: center;">
+    <img src="./app-images/single-dwdr.png" alt="Screenshot 1" style="width: 50%; margin-right: 10px;">
+    <img src="./app-images/single-dwl.png" alt="Screenshot 2" style="width: 50%;">
 </div>
 
 ## Overview
