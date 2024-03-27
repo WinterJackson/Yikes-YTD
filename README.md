@@ -2,8 +2,8 @@
 
 ## Screenshots
 
-![Screenshot 1](./images/darkfront.png)
-![Screenshot 2](./images/lightfront.png)
+![Screenshot 1](./app-images/single-dwdr.png) ![Screenshot 2](./app-images/single-dwl.png)
+
 
 ## Overview
 
@@ -58,8 +58,8 @@ python app.py
 
 ## Screenshots
 
-![Screenshot 1](./images/yikesdark.png)
-![Screenshot 2](./images/yikeslight.png)
+![Screenshot 1](./app-images/playlist-dwdr.png) ![Screenshot 2](./app-images/playlist-dwl.png)
+
 
 ## Contributing
 
