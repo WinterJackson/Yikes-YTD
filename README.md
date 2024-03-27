@@ -2,8 +2,10 @@
 
 ## Screenshots
 
-![Screenshot 1](./app-images/single-dwdr.png) ![Screenshot 2](./app-images/single-dwl.png)
-
+<div style="display: flex; flex-direction: row;">
+  <img src="./app-images/single-dwdr.png" alt="Screenshot 1" style="margin-right: 10px;">
+  <img src="./app-images/single-dwl.png" alt="Screenshot 2">
+</div>
 
 ## Overview
 
