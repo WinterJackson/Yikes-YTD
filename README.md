@@ -3,7 +3,7 @@
 ## Screenshots
 
 <div style="display: flex; justify-content: center;">
-    <img src="./app-images/single-dwdr.png" alt="Screenshot 1" style="width: 40%; margin-right: 30px;">
+    <img src="./app-images/single-dwdr.png" alt="Screenshot  1" style="width: 40%; margin-right: 30px;">
     <img src="./app-images/single-dwl.png" alt="Screenshot 2" style="width: 40%;">
 </div>
 
