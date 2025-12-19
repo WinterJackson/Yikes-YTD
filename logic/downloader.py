@@ -5,19 +5,36 @@ from typing import Optional, Dict, List, Any, Callable
 from .settings import current_settings
 
 def get_ffmpeg_location():
-    """Find FFmpeg binary, works in both dev and bundled app contexts."""
-    # 1. Check system PATH first
+    """Find FFmpeg binary, with high priority for bundled version to ensure zero-install."""
+    # 1. Check for bundled binary FIRST (Portable mode)
+    try:
+        from gui.main_window import resource_path
+        bundled_ffmpeg = resource_path(os.path.join("bin", "ffmpeg"))
+        if os.path.isfile(bundled_ffmpeg) and os.access(bundled_ffmpeg, os.X_OK):
+            import logging
+            logging.info(f"Using BUNDLED FFmpeg: {bundled_ffmpeg}")
+            return bundled_ffmpeg
+    except Exception:
+        # Fallback if resource_path/main_window isn't available during early imports
+        local_path = os.path.join(os.getcwd(), "bin", "ffmpeg")
+        if os.path.isfile(local_path) and os.access(local_path, os.X_OK):
+            return local_path
+
+    # 2. Check system PATH
     ffmpeg_path = shutil.which('ffmpeg')
     if ffmpeg_path:
         return ffmpeg_path
     
-    # 2. Check common Linux paths when PATH lookup fails (e.g., in bundled apps)
+    # 3. Check common Linux paths (e.g. for some distros where which fails)
     common_paths = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/snap/bin/ffmpeg']
     for path in common_paths:
         if os.path.isfile(path) and os.access(path, os.X_OK):
+            import logging
+            logging.info(f"Using FFmpeg from common path: {path}")
             return path
     
-    # 3. FFmpeg not found - return None (yt-dlp will try to proceed)
+    import logging
+    logging.error("FFmpeg NOT FOUND on system or bundle.")
     return None
 
 def fetch_video_info(url: str) -> Dict[str, Any]:

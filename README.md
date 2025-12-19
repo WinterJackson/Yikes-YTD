@@ -66,8 +66,10 @@ Every corner of **Yikes YTD** is crafted for clarity and ease of use.
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Python 3.10+** (Recommended)
-- **FFmpeg**: Essential for merging high-quality video and audio streams. [Download here](https://ffmpeg.org/download.html).
+- **Python 3.10+** (Recommended for local development)
+- **FFmpeg**: 
+    - **Linux**: ✅ **Bundled!** No installation required.
+    - **Windows/macOS**: Essential for merging high-quality streams. [Download here](https://ffmpeg.org/download.html).
 
 ### Setup & Run
 ```bash

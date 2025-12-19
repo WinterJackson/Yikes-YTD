@@ -14,7 +14,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('app-images', 'app-images')],
+    datas=[('app-images', 'app-images'), ('bin', 'bin')],
     hiddenimports=['PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},
