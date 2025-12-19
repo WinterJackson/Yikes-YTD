@@ -1,3 +1,13 @@
-downloads
-dist
-build
+downloads/
+dist/
+build/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+history.json
+settings.json
+*.zip
+.DS_Store

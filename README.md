@@ -1,85 +1,100 @@
-# Yikes YouTube Downloader
+# 💿 Yikes YTD — The Ultimate YouTube Downloader
 
-## Screenshots
+**Yikes YTD** is a professional, high-performance desktop application designed for seamless YouTube video and playlist extraction. Built with **Python** and **CustomTkinter**, it offers a stunning, modern interface that combines high-fidelity visuals with a powerful processing engine.
 
-<div style="display: flex; justify-content: center;">
-    <img src="./app-images/single-dwdr.png" alt="Screenshot  1" style="width: 40%; margin-right: 30px;">
-    <img src="./app-images/single-dwl.png" alt="Screenshot 2" style="width: 40%;">
-</div>
+![App Home](app-images/download-single-video-1.png)
 
-## Overview
+---
 
-The YouTube Video Downloader Application is a Python-based desktop application that allows users to easily download YouTube videos and playlists for offline viewing. It provides a simple and intuitive graphical user interface (GUI) for fetching video information, selecting desired formats, and initiating the download process. The application utilizes the `youtube_dl` library for interacting with the YouTube API and handling video downloads.
+## ✨ Premium Features
 
-## Features
+### 🎨 State-of-the-Art UI/UX
+- **Dynamic Theme Engine**: Change accent colors in real-time. Whether it's Blue, Orange, or Green, the UI adapts instantly.
+- **Adaptive Sidebar**: A fully responsive sidebar that can collapse to save space without losing functionality.
+- **Micro-Animations**: Smooth transitions and hover effects for a premium feel.
 
-- **Download Single Videos:** Users can download individual YouTube videos by simply providing the video URL and selecting their desired format (e.g., video or audio-only).
-  
-- **Download Playlists:** The application supports downloading entire YouTube playlists, allowing users to save multiple videos at once for offline viewing.
-  
-- **Asynchronous Downloading:** Video information is fetched asynchronously to prevent blocking the user interface during the download process. This ensures smooth operation and responsiveness even with large playlists.
-  
-- **Real-time Progress Tracking:** During the download process, users can track the progress in real-time through a progress bar and accompanying labels that display the percentage completed, download speed, and estimated time remaining.
-  
-- **Error Handling:** The application includes robust error handling mechanisms to handle various scenarios, such as invalid URLs, failed downloads, or network issues. Users are provided with informative error messages for troubleshooting.
-  
-- **User-Friendly Interface:** The graphical user interface is designed to be user-friendly and intuitive, with clear labeling, interactive elements, and smooth transitions between single video and playlist modes.
+### ⚡ Unmatched Performance
+- **Powered by `yt-dlp`**: The gold standard in video extraction, guaranteed to be fast and stable.
+- **Multi-Format Mastery**: Support for 4K, 1080p, 720p (MP4), high-bitrate MP3, WAV, M4A, and even GIF conversion.
+- **Intelligent Playlist Management**: Automatically detects playlists and organizes them into dedicated, sanitized folders.
 
-## Installation
+---
 
-1. **Clone the Repository:**
+## 📸 Exploring the Application
 
+### 📥 The Download Hub
+Experience a streamlined workflow for both individual videos and massive playlists.
+
+````carousel
+![Single Video Selection](app-images/download-page-single-video-2.png)
+<!-- slide -->
+![Single Video Downloading](app-images/download-page-single-video-3.png)
+<!-- slide -->
+![Playlist Detected](app-images/download-page-playlist-1.png)
+<!-- slide -->
+![Playlist Resolution Choice](app-images/download-page-playlist-11.png)
+<!-- slide -->
+![Playlist Progress Tracking](app-images/download-page-playlist-22.png)
+````
+
+> [!TIP]
+> **Yikes YTD** handles the heavy lifting of metadata extraction and folder organization, ensuring your library stays perfectly organized.
+
+### 🕒 History & Theming
+Track your downloads and express your style with our live accent color system.
+
+````carousel
+![Standard History](app-images/history-page-1.png)
+<!-- slide -->
+![Orange Theme Preview](app-images/history-page-orange-theme.png)
+<!-- slide -->
+![Collapsed Sidebar Mode](app-images/collapsed-sidebar-image-1.png)
+````
+
+### ⚙️ Page Gallery
+Every corner of **Yikes YTD** is crafted for clarity and ease of use.
+
+| Page | Description | Visual |
+| :--- | :--- | :--- |
+| **Settings** | Control your download path, theme accents, and app behavior. | ![Settings](app-images/settings-page-1.png) |
+| **Help** | Integrated user guide covering all features and troubleshooting. | ![Help](app-images/help-page-1.png) |
+| **Feedback** | We value your voice. Send suggestions directly from the app. | ![Feedback](app-images/feedback-page-1.png) |
+| **About** | Version info, credits, and links to our community. | ![About](app-images/about-page-1.png) |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- **Python 3.10+** (Recommended)
+- **FFmpeg**: Essential for merging high-quality video and audio streams. [Download here](https://ffmpeg.org/download.html).
+
+### Setup & Run
+```bash
+# Clone the repository
 git clone https://github.com/WinterJackson/Yikes-YTD.git
-cd youtube-video-downloader
+cd Yikes-YTD
 
-2. **Install Dependencies:**
-
+# Install dependencies
 pip install -r requirements.txt
 
-3. **Run the Application:**
+# Start Application
+python main.py
+```
 
-python app.py
+### Build a Standalone App
+Generate a native executable for your OS using our optimized build config:
+```bash
+pip install pyinstaller
+pyinstaller "Yikes YTD.spec"
+```
+The result will be located in the `dist/` folder.
 
-## Usage
+---
 
-1. **Single Video Download:**
-- Enter the URL of the desired YouTube video.
-- Select the preferred format (video or audio-only).
-- Click the "Download" button to initiate the download process.
+## 🤝 Acknowledgements
+- **CustomTkinter**: The foundation for our modern look.
+- **yt-dlp**: The engine that makes high-speed downloads possible.
 
-2. **Playlist Download:**
-- Enter the URL of the desired YouTube playlist.
-- Select the preferred format (video or audio-only).
-- Click the "Download" button to initiate the download process.
-
-3. **Monitoring Progress:**
-- During the download process, track progress via the progress bar and labels displaying percentage completed, download speed, and estimated time remaining.
-
-4. **Error Handling:**
-- If an error occurs during the download process, an informative error message will be displayed to assist with troubleshooting.
-
-## Screenshots
-
-![Screenshot 1](./app-images/playlist-dwdr.png) ![Screenshot 2](./app-images/playlist-dwl.png)
-
-
-## Contributing
-
-Contributions to Yikes YouTube Video Downloader Application are welcome! To contribute:
-
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature/your-feature`).
-3. Make your changes.
-4. Commit your changes (`git commit -am 'Add new feature'`).
-5. Push to the branch (`git push origin feature/your-feature`).
-6. Create a new Pull Request.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
-## Acknowledgements
-
-- The application utilizes the `youtube_dl` library for interacting with the YouTube API and handling video downloads.
-- Special thanks to the contributors and maintainers of the `youtube_dl` library for their valuable contributions.
-
+---
+© 2025 Winter Jackson - Built with ❤️ for the community.
