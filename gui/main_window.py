@@ -2325,8 +2325,9 @@ class YikesApp(ctk.CTk):
             except: pass
             
         # 2. Config with expanded types
+        # 2. Config with expanded types
         colors = {
-            "success": "#2CC985",  # Vivid Green
+            "success": self.accent_color,  # Match User Accent
             "error": "#FF5555",    # Soft Red
             "warning": "#FFA500",  # Orange
             "info": self.accent_color
@@ -2341,8 +2342,9 @@ class YikesApp(ctk.CTk):
         icon = icons.get(type, "ℹ")
         
         # 3. Create Container (Modern Pill Shape with subtle shadow)
+        # Fix: bg_color="transparent" prevents black corners
         toast = ctk.CTkFrame(self, fg_color=color, corner_radius=25, 
-                             border_width=1, border_color="gray30")
+                             border_width=1, border_color="gray30", bg_color="transparent")
         
         # 4. Content with padding
         content = ctk.CTkFrame(toast, fg_color="transparent")
