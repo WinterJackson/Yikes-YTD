@@ -186,6 +186,8 @@ def build_ydl_opts(path, format_key, noplaylist=True, trim_range=None):
         opts['format'] = 'bestaudio[ext=m4a]/best'
     elif format_key == '4k':
         opts['format'] = 'bestvideo[height=2160][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height=2160]+bestaudio/bestvideo[vcodec^=avc1]+bestaudio/best'
+    elif format_key == '1440p':
+        opts['format'] = 'bestvideo[height=1440][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height=1440]+bestaudio/bestvideo[height<=1440][vcodec^=avc1]+bestaudio/best'
     elif format_key == '1080p':
         opts['format'] = 'bestvideo[height=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height=1080]+bestaudio/bestvideo[height<=1080][vcodec^=avc1]+bestaudio/best'
     elif format_key == '720p':
@@ -193,9 +195,8 @@ def build_ydl_opts(path, format_key, noplaylist=True, trim_range=None):
     elif format_key == '480p':
         opts['format'] = 'bestvideo[height=480][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height=480]+bestaudio/bestvideo[height<=480][vcodec^=avc1]+bestaudio/best'
     else:
-        # Fallback / Custom (Best Quality)
-        # Explicit priority for H.264 (avc1) to avoid AV1 playback issues on some players
-        opts['format'] = 'bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo+bestaudio/best' 
+        # Fallback (Best Quality)
+        opts['format'] = 'bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo+bestaudio/best'
         
     # Security: Restrict filenames to ASCII to prevent filesystem issues
     opts['restrictfilenames'] = True 
@@ -219,6 +220,26 @@ def build_ydl_opts(path, format_key, noplaylist=True, trim_range=None):
         opts['cookiefile'] = settings["cookies_path"]
 
     return opts
+
+def get_max_resolution(info):
+    """Determine the actual maximum resolution available for a video."""
+    if not info or 'formats' not in info:
+        return 0
+    
+    max_h = 0
+    for fmt in info.get('formats', []):
+        h = fmt.get('height')
+        if h and isinstance(h, (int, float)):
+            if h > max_h:
+                max_h = int(h)
+    
+    # Check top-level height too (sometimes 'formats' is missing or incomplete in flat extract)
+    top_h = info.get('height')
+    if top_h and isinstance(top_h, (int, float)):
+        if top_h > max_h:
+            max_h = int(top_h)
+            
+    return max_h
 
 def check_formats(url):
     """Helper to check available formats for a URL before downloading."""

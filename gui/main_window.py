@@ -23,7 +23,7 @@ logging.basicConfig(filename="yikes_debug.log", level=logging.DEBUG,
 # Import Logic Modules
 from logic.settings import current_settings, save_settings, add_to_queue, remove_from_queue, get_queue, pop_queue, save_history, load_history
 from logic.utils import parse_time_to_seconds, format_eta
-from logic.downloader import fetch_video_info, fetch_playlist_info, start_download_thread, build_ydl_opts
+from logic.downloader import fetch_video_info, fetch_playlist_info, start_download_thread, build_ydl_opts, get_max_resolution
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller bundle """
@@ -424,9 +424,9 @@ class YikesApp(ctk.CTk):
         
         # Format
         ctk.CTkLabel(ctrl_frame, text="Format:", font=("Comfortaa", 14), text_color=self.text_color).pack(side="left", padx=(0, 10))
-        self.format_var = ctk.StringVar(value="Best Quality")
+        self.format_var = ctk.StringVar(value="1080p")
         self.format_combo = ctk.CTkComboBox(ctrl_frame, variable=self.format_var, 
-                                            values=["Best Quality", "4K (2160p)", "1080p", "720p", "480p", 
+                                            values=["4K (2160p)", "1440p (2K)", "1080p", "720p", "480p", 
                                                     "Audio (MP3 - 320kbps)", "Audio (MP3 - 192kbps)", "Audio (MP3 - 128kbps)", 
                                                     "Audio (WAV)", "Audio (M4A)", "GIF (Animated)"], 
                                             width=160, height=35,
@@ -843,7 +843,7 @@ class YikesApp(ctk.CTk):
         add_section("Frequently Asked Questions")
         faq = [
             ("How to Download?", "Paste a URL in the Download tab and click 'Download Now'.\nSelect 'Playlist' automatically if a list URL is detected."),
-            ("Supported Formats?", "Video (Best, 4K, 1080p, etc.) and Audio (MP3, M4A).\nSelect via the dropdown menu."),
+            ("Supported Formats?", "Video (4K, 2K, 1080p, etc.) and Audio (MP3, WAV, M4A).\nThe app automatically checks if your selected quality is available for the video."),
             ("Where are my files?", f"Check Settings for the folder.\nDefault: {current_settings['download_path']}"),
             ("Download Speed?", "Dependent on your connection and YouTube servers.\nSet a speed limit in settings if needed."),
         ]
@@ -1324,6 +1324,33 @@ class YikesApp(ctk.CTk):
             self.status_label.configure(text="Cancelling...", text_color="red")
             self.download_btn.configure(state="disabled", text="Stopping...")
 
+    def validate_format_availability(self, info):
+        """Check if selected quality is available for the given video."""
+        if not info: return True, ""
+        
+        sel = self.format_var.get()
+        # Skip check for audio/gif
+        if "Audio" in sel or "GIF" in sel:
+            return True, ""
+            
+        requested_h = 0
+        if "4K" in sel: requested_h = 2160
+        elif "1440p" in sel: requested_h = 1440
+        elif "1080p" in sel: requested_h = 1080
+        elif "720p" in sel: requested_h = 720
+        elif "480p" in sel: requested_h = 480
+        else: return True, "" # Best Quality if it still existed
+        
+        max_h = get_max_resolution(info)
+        
+        if max_h > 0 and requested_h > max_h:
+            # Map height to readable name
+            res_names = {2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p", 480: "480p"}
+            max_name = res_names.get(max_h, f"{max_h}p")
+            return False, f"Notice: This video only supports up to {max_name}. Downloading at the highest available quality instead."
+            
+        return True, ""
+
     def start_download(self):
         url = self.url_entry.get()
         if not url: 
@@ -1360,8 +1387,9 @@ class YikesApp(ctk.CTk):
         
         # Helper Map
         sel = self.format_var.get()
-        fmt_key = "best"
+        fmt_key = "1080p" # New default
         if "4K" in sel: fmt_key = "4k"
+        elif "1440p" in sel: fmt_key = "1440p"
         elif "1080p" in sel: fmt_key = "1080p"
         elif "720p" in sel: fmt_key = "720p"
         elif "480p" in sel: fmt_key = "480p"
@@ -1371,6 +1399,14 @@ class YikesApp(ctk.CTk):
         elif "WAV" in sel: fmt_key = "wav"
         elif "M4A" in sel: fmt_key = "m4a"
         elif "GIF" in sel: fmt_key = "gif"
+        
+        # Availability Validation
+        if not self.is_playlist and self.current_video_info:
+            valid, warning = self.validate_format_availability(self.current_video_info)
+            if not valid:
+                self.show_notification(warning, type="info")
+                # We proceed anyway, yt-dlp will pick the best available under the constraint
+                # but the user is now accurately notified.
         
         if self.is_playlist:
             # Create playlist folder inside downloads folder

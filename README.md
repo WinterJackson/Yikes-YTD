@@ -15,8 +15,9 @@
 
 ### ⚡ Unmatched Performance
 - **Powered by `yt-dlp`**: The gold standard in video extraction, guaranteed to be fast and stable.
-- **Multi-Format Mastery**: Support for 4K, 1080p, 720p (MP4), high-bitrate MP3, WAV, M4A, and even GIF conversion.
-- **Intelligent Playlist Management**: Automatically detects playlists and organizes them into dedicated, sanitized folders.
+- **Multi-Format Mastery**: Support for 4K, 2K, 1080p, 720p (MP4), high-bitrate MP3, WAV, M4A, and even GIF conversion.
+- **Intelligent Quality Detection**: Automatically verifies if your selected quality is available for a video and provides smart recommendations.
+- **Advanced Playlist Management**: Automatically detects playlists and organizes them into dedicated, sanitized folders.
 
 ---
 
