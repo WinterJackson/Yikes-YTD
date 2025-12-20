@@ -2369,7 +2369,7 @@ class YikesApp(ctk.CTk):
             if toast.winfo_exists():
                 toast.destroy()
         
-        self.after(3500, hide)
+        self.after(6000, hide)
 
     def show_confirm_dialog(self, title, message, confirm_text="Confirm", cancel_text="Cancel", 
                             dialog_type="warning", on_confirm=None, on_cancel=None):
