@@ -1,6 +1,7 @@
 import threading
 import os
 import shutil
+import subprocess
 from typing import Optional, Dict, List, Any, Callable
 from .settings import current_settings
 
@@ -36,6 +37,45 @@ def get_ffmpeg_location():
     import logging
     logging.error("FFmpeg NOT FOUND on system or bundle.")
     return None
+
+def verify_ffmpeg_executable():
+    """
+    Verify that FFmpeg can actually be executed. Handles noexec partitions gracefully.
+    Returns (ffmpeg_path, warning_message or None).
+    """
+    import logging
+    
+    ffmpeg_path = get_ffmpeg_location()
+    if not ffmpeg_path:
+        return None, "FFmpeg not found. Video merging will fail."
+    
+    # Test actual execution (handles noexec partition scenario)
+    try:
+        result = subprocess.run(
+            [ffmpeg_path, '-version'],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return ffmpeg_path, None  # All good
+    except PermissionError:
+        logging.warning(f"FFmpeg at {ffmpeg_path} cannot execute (noexec partition?)")
+        # Try to fall back to system FFmpeg
+        system_ffmpeg = shutil.which('ffmpeg')
+        if system_ffmpeg and system_ffmpeg != ffmpeg_path:
+            try:
+                result = subprocess.run([system_ffmpeg, '-version'], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    return system_ffmpeg, "Bundled FFmpeg not executable. Using system FFmpeg instead."
+            except:
+                pass
+        return None, "FFmpeg found but cannot execute (partition may have noexec flag)."
+    except Exception as e:
+        logging.error(f"FFmpeg verification failed: {e}")
+        return ffmpeg_path, f"FFmpeg verification warning: {str(e)[:50]}"
+    
+    return ffmpeg_path, None
+
 
 def fetch_video_info(url: str) -> Dict[str, Any]:
     from yt_dlp import YoutubeDL

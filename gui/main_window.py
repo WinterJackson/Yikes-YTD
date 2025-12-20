@@ -21,8 +21,8 @@ logging.basicConfig(filename="yikes_debug.log", level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Import Logic Modules
-from logic.settings import current_settings, save_settings, add_to_queue, remove_from_queue, get_queue, pop_queue, save_history, load_history
-from logic.utils import parse_time_to_seconds, format_eta
+from logic.settings import current_settings, save_settings, add_to_queue, remove_from_queue, get_queue, pop_queue, save_history, load_history, clear_queue
+from logic.utils import parse_time_to_seconds, format_eta, get_free_disk_space_gb
 from logic.downloader import fetch_video_info, fetch_playlist_info, start_download_thread, build_ydl_opts, get_max_resolution
 
 def resource_path(relative_path):
@@ -129,6 +129,13 @@ class YikesApp(ctk.CTk):
             self.current_frame = None
             self.is_playlist = False
             self.playlist_entries = []
+            self.current_video_info = None  # Prevent AttributeError on direct download
+            self.current_playlist_info = None
+            self.current_playlist_folder = None
+            self.playlist_widgets = []  # For playlist row UI references
+            self.is_cancelled = False
+            self.is_processing_queue = False
+            self.is_fetching = False  # Debounce for rapid clicks
             
             # Async Executor
             self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
@@ -423,9 +430,15 @@ class YikesApp(ctk.CTk):
         ctrl_frame.pack(pady=20, fill="x")
         
         # Format
-        ctk.CTkLabel(ctrl_frame, text="Format:", font=("Comfortaa", 14), text_color=self.text_color).pack(side="left", padx=(0, 10))
+        format_frame = ctk.CTkFrame(ctrl_frame, fg_color="transparent")
+        format_frame.pack(side="left", padx=(0, 30))
+        
+        format_row = ctk.CTkFrame(format_frame, fg_color="transparent")
+        format_row.pack(anchor="w")
+        
+        ctk.CTkLabel(format_row, text="Format:", font=("Comfortaa", 14), text_color=self.text_color).pack(side="left", padx=(0, 10))
         self.format_var = ctk.StringVar(value="1080p")
-        self.format_combo = ctk.CTkComboBox(ctrl_frame, variable=self.format_var, 
+        self.format_combo = ctk.CTkComboBox(format_row, variable=self.format_var, 
                                             values=["4K (2160p)", "1440p (2K)", "1080p", "720p", "480p", 
                                                     "Audio (MP3 - 320kbps)", "Audio (MP3 - 192kbps)", "Audio (MP3 - 128kbps)", 
                                                     "Audio (WAV)", "Audio (M4A)", "GIF (Animated)"], 
@@ -433,23 +446,49 @@ class YikesApp(ctk.CTk):
                                             fg_color=self.card_color, text_color=self.text_color,
                                             border_color=self.accent_color, button_color=self.accent_color, button_hover_color=self.hover_color,
                                             dropdown_fg_color=self.card_color, dropdown_text_color=self.text_color)
-        self.format_combo.pack(side="left", padx=(0, 30))
+        self.format_combo.pack(side="left", padx=(0, 20))
         
-        # Trim Toggle - BLUE Accent
+        # Trim Toggle - BLUE Accent (Now in the same row for alignment)
         self.trim_var = ctk.BooleanVar(value=False)
-        self.trim_btn = ctk.CTkCheckBox(ctrl_frame, text="Trim Video", variable=self.trim_var, text_color=self.text_color, 
+        self.trim_btn = ctk.CTkCheckBox(format_row, text="Trim Video", variable=self.trim_var, text_color=self.text_color, 
                                         fg_color=self.accent_color, hover_color=self.hover_color, command=self.toggle_trim)
         self.trim_btn.pack(side="left")
         
-        # Trim Inputs
-        self.trim_frame = ctk.CTkFrame(ctrl_frame, fg_color="transparent")
+        # Trim Inputs (Now in the same row for alignment)
+        self.trim_frame = ctk.CTkFrame(format_row, fg_color="transparent")
         self.trim_frame.pack(side="left", padx=20)
         self.start_trim = ctk.CTkEntry(self.trim_frame, width=70, placeholder_text="Start")
         self.start_trim.pack(side="left", padx=5)
         ctk.CTkLabel(self.trim_frame, text="-", text_color=self.text_color).pack(side="left")
         self.end_trim = ctk.CTkEntry(self.trim_frame, width=70, placeholder_text="End")
         self.end_trim.pack(side="left", padx=5)
-        # Toggle Trim Logic (Moved down to keep grouped)
+        
+        # Display Resolution Indicator (Below the whole row)
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        
+        # Map height to quality name
+        if screen_h >= 2160:
+            display_quality = "4K"
+        elif screen_h >= 1440:
+            display_quality = "2K"
+        elif screen_h >= 1080:
+            display_quality = "1080p"
+        elif screen_h >= 720:
+            display_quality = "720p"
+        else:
+            display_quality = "SD"
+        
+        display_info = f"📺 Your display: {screen_w}×{screen_h} ({display_quality})"
+        self.display_res_label = ctk.CTkLabel(
+            format_frame, 
+            text=display_info, 
+            font=("Comfortaa", 11), 
+            text_color="gray60"
+        )
+        self.display_res_label.pack(anchor="w", pady=(4, 0))
+        
+        # Initial State
         self.toggle_trim()
 
         # Action Buttons (Moved back to TOP as requested)
@@ -1034,53 +1073,78 @@ class YikesApp(ctk.CTk):
         url = self.url_entry.get().strip()
         if not url: return
         
+        # Debounce: Prevent rapid clicks from spawning multiple fetch threads
+        if getattr(self, 'is_fetching', False):
+            return
+        
         # Security Check
         valid, msg = self.validate_security(url)
         if not valid:
              self.status_label.configure(text=f"Security Error: {msg}", text_color="red")
              return
-             
+        
+        self.is_fetching = True
         self.status_label.configure(text="Checking...", text_color=self.accent_color)
         threading.Thread(target=self._check_link_worker, args=(url,), daemon=True).start()
 
     def _check_link_worker(self, url):
-        # Determine likely type
-        is_playlist_url = "list=" in url
-        
-        if is_playlist_url:
-            self.after(0, lambda: self.status_label.configure(text="Fetching Playlist info...", text_color=self.accent_color))
+        try:
+            # Determine likely type
+            is_playlist_url = "list=" in url
+            
+            if is_playlist_url:
+                self.after(0, lambda: self.status_label.configure(text="Fetching Playlist info...", text_color=self.accent_color))
+                try:
+                    info = fetch_playlist_info(url)
+                except Exception as e:
+                    err_msg = str(e)
+                    self.after(0, lambda: self.status_label.configure(text=f"Error: {err_msg[:40]}...", text_color="red"))
+                    print(f"Playlist Fetch Error: {e}")
+                    return
+
+                if info and 'entries' in info:
+                    # Is a playlist
+                    self.after(0, lambda: self.update_ui_for_playlist(info))
+                    return
+            
+            # Fallback or single video
+            self.after(0, lambda: self.status_label.configure(text="Fetching Video info...", text_color=self.accent_color))
             try:
-                info = fetch_playlist_info(url)
+                info = fetch_video_info(url)
             except Exception as e:
                 err_msg = str(e)
                 self.after(0, lambda: self.status_label.configure(text=f"Error: {err_msg[:40]}...", text_color="red"))
-                print(f"Playlist Fetch Error: {e}")
+                print(f"Video Fetch Error: {e}")
                 return
-
-            if info and 'entries' in info:
-                # Is a playlist
-                self.after(0, lambda: self.update_ui_for_playlist(info))
-                return
-        
-        # Fallback or single video
-        self.after(0, lambda: self.status_label.configure(text="Fetching Video info...", text_color=self.accent_color))
-        try:
-            info = fetch_video_info(url)
-        except Exception as e:
-            err_msg = str(e)
-            self.after(0, lambda: self.status_label.configure(text=f"Error: {err_msg[:40]}...", text_color="red"))
-            print(f"Video Fetch Error: {e}")
-            return
-            
-        if info:
-            if 'entries' in info: # It was a playlist after all?
-                self.after(0, lambda: self.update_ui_for_playlist(info))
+                
+            if info:
+                # Live Stream Detection
+                is_live = info.get('is_live', False)
+                was_live = info.get('was_live', False)
+                duration = info.get('duration')
+                
+                if is_live:
+                    self.after(0, lambda: self.show_notification(
+                        "⚠️ This is a LIVE stream! Downloading may run indefinitely and fill disk space.", 
+                        type="warning"
+                    ))
+                elif was_live and (duration is None or duration > 36000):  # > 10 hours
+                    self.after(0, lambda: self.show_notification(
+                        "⚠️ This appears to be a long stream recording. Consider trimming.",
+                        type="info"
+                    ))
+                
+                if 'entries' in info: # It was a playlist after all?
+                    self.after(0, lambda: self.update_ui_for_playlist(info))
+                else:
+                    title = info.get('title', 'Unknown')
+                    thumb = info.get('thumbnail')
+                    self.after(0, lambda: self.update_ui_for_video(title, thumb, info))
             else:
-                title = info.get('title', 'Unknown')
-                thumb = info.get('thumbnail')
-                self.after(0, lambda: self.update_ui_for_video(title, thumb, info))
-        else:
-            self.after(0, lambda: self.status_label.configure(text="Invalid URL or Error", text_color="red"))
+                self.after(0, lambda: self.status_label.configure(text="Invalid URL or Error", text_color="red"))
+        finally:
+            # Always reset debounce flag
+            self.is_fetching = False
 
     def clear_data(self):
         # Reset UI to initial state
@@ -1136,64 +1200,99 @@ class YikesApp(ctk.CTk):
         
         # Configure Grid Columns for the Scroll Frame
         self.playlist_scroll.grid_columnconfigure(1, weight=1) # Title takes space
-
-        for i, entry in enumerate(self.playlist_entries):
-            # Row Container
-            row = ctk.CTkFrame(self.playlist_scroll, fg_color="transparent")
-            row.pack(fill="x", pady=5, padx=5)
-            
-            # 1. Thumbnail Placeholder (100x50)
-            thumb_label = ctk.CTkLabel(row, text="", width=100, height=56, fg_color="black") # 16:9 approx
-            thumb_label.pack(side="left", padx=(0, 10))
-            
-            # 2. Text Info
-            text_frame = ctk.CTkFrame(row, fg_color="transparent")
-            text_frame.pack(side="left", fill="both", expand=True)
-            
-            # Title
-            t = entry.get('title', 'Unknown Title')
-            if len(t) > 65: t = t[:62] + "..."
-            ctk.CTkLabel(text_frame, text=f"{i+1}. {t}", font=("Comfortaa", 13, "bold"), anchor="w", text_color=self.text_color).pack(fill="x")
-            
-            # Uploader
-            uploader = entry.get('uploader') or entry.get('channel') or "Unknown Uploader"
-            ctk.CTkLabel(text_frame, text=uploader, font=("Comfortaa", 11), text_color="gray60", anchor="w").pack(fill="x")
-
-            # 3. Status Column (Progress + Icon)
-            status_frame = ctk.CTkFrame(row, fg_color="transparent", width=250)
-            status_frame.pack(side="right", padx=10)
-            
-            # Progress Bar (Hidden initially or 0)
-            p_bar = ctk.CTkProgressBar(status_frame, width=100, height=8, progress_color=self.accent_color)
-            p_bar.set(0)
-            p_bar.pack(pady=(5, 2), anchor="e")
-            
-            # Status Text
-            s_label = ctk.CTkLabel(status_frame, text="Pending", font=("Comfortaa", 11), text_color="gray60")
-            s_label.pack(anchor="e")
-            
-            # Store refs
-            self.playlist_widgets.append({
-                "progress": p_bar,
-                "status": s_label,
-                "row": row
-            })
-
-
-        # Trigger Async Thumbnail Load
-            thumbnails = entry.get('thumbnails')
-            if thumbnails:
-                 # Find best thumbnail that isn't too huge, or just take first non-None
-                 # Flat extract often gives a list. We'll pick one.
-                 thumb_url = thumbnails[0].get('url') if isinstance(thumbnails, list) and thumbnails else None
-                 if thumb_url:
-                     self.executor.submit(self._async_load_playlist_thumb, thumb_url, thumb_label)
-            
-             # recursive bind scroll
-            self._bind_scroll_recursive(row)
+        
+        # Performance: Limit initial render to 100 items, batch the rest
+        initial_batch_size = 100
+        entries_to_render = self.playlist_entries[:initial_batch_size]
+        remaining_entries = self.playlist_entries[initial_batch_size:]
+        
+        for i, entry in enumerate(entries_to_render):
+            self._render_playlist_row(i, entry)
+        
+        # If there are more, add a "Load More" indicator and continue in background
+        if remaining_entries:
+            self._load_more_label = ctk.CTkLabel(
+                self.playlist_scroll, 
+                text=f"Loading {len(remaining_entries)} more videos...", 
+                font=("Comfortaa", 12), 
+                text_color=self.accent_color
+            )
+            self._load_more_label.pack(pady=10)
+            # Start batched background render (10 at a time, non-blocking)
+            self.after(100, lambda: self._render_playlist_batch(initial_batch_size, remaining_entries, 0))
             
         # Check scroll visibility
         self.after(200, self._check_playlist_scroll)
+
+    def _render_playlist_row(self, index, entry):
+        """Render a single playlist row widget."""
+        # Row Container
+        row = ctk.CTkFrame(self.playlist_scroll, fg_color="transparent")
+        row.pack(fill="x", pady=5, padx=5)
+        
+        # 1. Thumbnail Placeholder (100x50)
+        thumb_label = ctk.CTkLabel(row, text="", width=100, height=56, fg_color="black") # 16:9 approx
+        thumb_label.pack(side="left", padx=(0, 10))
+        
+        # 2. Text Info
+        text_frame = ctk.CTkFrame(row, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True)
+        
+        # Title
+        t = entry.get('title', 'Unknown Title')
+        if len(t) > 65: t = t[:62] + "..."
+        ctk.CTkLabel(text_frame, text=f"{index+1}. {t}", font=("Comfortaa", 13, "bold"), anchor="w", text_color=self.text_color).pack(fill="x")
+        
+        # Uploader
+        uploader = entry.get('uploader') or entry.get('channel') or "Unknown Uploader"
+        ctk.CTkLabel(text_frame, text=uploader, font=("Comfortaa", 11), text_color="gray60", anchor="w").pack(fill="x")
+
+        # 3. Status Column (Progress + Icon)
+        status_frame = ctk.CTkFrame(row, fg_color="transparent", width=250)
+        status_frame.pack(side="right", padx=10)
+        
+        # Progress Bar (Hidden initially or 0)
+        p_bar = ctk.CTkProgressBar(status_frame, width=100, height=8, progress_color=self.accent_color)
+        p_bar.set(0)
+        p_bar.pack(pady=(5, 2), anchor="e")
+        
+        # Status Text
+        s_label = ctk.CTkLabel(status_frame, text="Pending", font=("Comfortaa", 11), text_color="gray60")
+        s_label.pack(anchor="e")
+        
+        # Store refs
+        self.playlist_widgets.append({
+            "progress": p_bar,
+            "status": s_label,
+            "row": row
+        })
+
+        # Trigger Async Thumbnail Load
+        thumbnails = entry.get('thumbnails')
+        if thumbnails:
+            thumb_url = thumbnails[0].get('url') if isinstance(thumbnails, list) and thumbnails else None
+            if thumb_url:
+                self.executor.submit(self._async_load_playlist_thumb, thumb_url, thumb_label)
+        
+        # Recursive bind scroll
+        self._bind_scroll_recursive(row)
+
+    def _render_playlist_batch(self, start_index, remaining, batch_offset):
+        """Render remaining playlist items in small batches for smooth UI."""
+        batch_size = 10
+        batch = remaining[batch_offset:batch_offset + batch_size]
+        
+        for i, entry in enumerate(batch):
+            self._render_playlist_row(start_index + batch_offset + i, entry)
+        
+        new_offset = batch_offset + batch_size
+        if new_offset < len(remaining):
+            # Schedule next batch
+            self.after(50, lambda: self._render_playlist_batch(start_index, remaining, new_offset))
+        else:
+            # All done, remove loader
+            if hasattr(self, '_load_more_label') and self._load_more_label.winfo_exists():
+                self._load_more_label.destroy()
 
         # STRICTLY DISABLE TRIM for Playlists
         self.trim_var.set(False)
@@ -1319,7 +1418,7 @@ class YikesApp(ctk.CTk):
             pass
 
     def cancel_download_action(self):
-        if messagebox.askyesno("Cancel", "Stop the download?"):
+        if self.show_blocking_confirm("Cancel Download", "Stop the current download?", "Stop", "Continue", "warning"):
             self.is_cancelled = True
             self.status_label.configure(text="Cancelling...", text_color="red")
             self.download_btn.configure(state="disabled", text="Stopping...")
@@ -1411,9 +1510,11 @@ class YikesApp(ctk.CTk):
         if self.is_playlist:
             # Create playlist folder inside downloads folder
             playlist_title = getattr(self, "current_playlist_info", {}).get("title", "Playlist")
-            # Sanitize folder name (remove invalid filesystem characters)
+            # Sanitize folder name (remove invalid filesystem characters + Windows reserved names)
             safe_title = re.sub(r'[<>:"/\\|?*]', '_', playlist_title)[:100].strip()
-            if not safe_title:
+            # Handle Windows reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+            reserved_names = {'CON', 'PRN', 'AUX', 'NUL'} | {f'COM{i}' for i in range(1, 10)} | {f'LPT{i}' for i in range(1, 10)}
+            if safe_title.upper() in reserved_names or not safe_title:
                 safe_title = "Playlist"
             playlist_path = os.path.join(current_settings["download_path"], safe_title)
             os.makedirs(playlist_path, exist_ok=True)
@@ -1427,7 +1528,17 @@ class YikesApp(ctk.CTk):
         else:
             # Single Download: Use default path
             self.current_playlist_folder = None
-            opts = build_ydl_opts(current_settings["download_path"], fmt_key, trim_range=trim_range)
+            
+            # Disk Space Check for single video (warn if < 2GB free)
+            download_path = current_settings["download_path"]
+            free_gb = get_free_disk_space_gb(download_path)
+            if 0 < free_gb < 2:
+                self.show_notification(
+                    f"⚠️ Low disk space! Only {free_gb:.1f}GB free. Download may fail.",
+                    type="warning"
+                )
+            
+            opts = build_ydl_opts(download_path, fmt_key, trim_range=trim_range)
             
             # Start Single Download Thread
             self.status_label.configure(text="Initializing Download...", text_color=self.text_color)
@@ -1442,8 +1553,19 @@ class YikesApp(ctk.CTk):
             start_download_thread(url, opts, self.on_progress, self.on_complete, self.on_error, lambda: self.is_cancelled)
 
     def playlist_download_worker(self, opts):
-        """Sequential download manager for playlists with per-item progress"""
+        """Sequential download manager for playlists with per-item progress and failure tracking"""
         total_videos = len(self.playlist_entries)
+        failed_count = 0  # Track failures for accurate reporting
+        
+        # Disk Space Check for playlists (estimate 500MB per video, warn if low)
+        download_path = current_settings["download_path"]
+        free_gb = get_free_disk_space_gb(download_path)
+        estimated_need_gb = total_videos * 0.5  # 500MB per video estimate
+        if free_gb > 0 and free_gb < estimated_need_gb:
+            self.after(0, lambda: self.show_notification(
+                f"⚠️ Low disk space! {free_gb:.1f}GB free, playlist may need ~{estimated_need_gb:.0f}GB.",
+                type="warning"
+            ))
         
         # Hide global progress for cleaner UI (since we have per-row bars)
         self.after(0, lambda: self.progress_bar.pack_forget())
@@ -1511,13 +1633,21 @@ class YikesApp(ctk.CTk):
                 self.after(0, lambda idx=i: self.update_playlist_row_progress(idx, 1.0))
 
             except Exception as e:
+                failed_count += 1  # Increment failure counter
                 print(f"Failed to download {title}: {e}")
                 self.after(0, lambda idx=i: self.update_playlist_row_status(idx, "Failed", "red"))
             
             time.sleep(1)
             
-        # All Done - Success State (No Popup)
-        self.after(0, lambda: self.status_label.configure(text=f"✔ Playlist Download Complete!", text_color="green"))
+        # Accurate Completion Status
+        if failed_count > 0:
+            status_msg = f"✔ Playlist Complete ({total_videos - failed_count}/{total_videos} succeeded, {failed_count} failed)"
+            status_color = "orange"
+        else:
+            status_msg = f"✔ Playlist Download Complete!"
+            status_color = "green"
+            
+        self.after(0, lambda: self.status_label.configure(text=status_msg, text_color=status_color))
         self.after(0, lambda: self.download_btn.configure(state="normal", text="Open Folder", command=self.open_download_folder))
         self.download_in_progress = False
         
@@ -1540,9 +1670,9 @@ class YikesApp(ctk.CTk):
         self.after(0, lambda: save_history(entry))
         self.after(0, lambda: self.update_history_ui())
         
-        # Notification
-        if current_settings.get("notifications", True):
-             self.after(0, lambda: subprocess.run(['notify-send', "Yikes YTD", "Playlist Download Complete!"], check=False))
+        # Platform-Aware Notification (Linux only)
+        if current_settings.get("notifications", True) and sys.platform.startswith('linux'):
+             self.after(0, lambda: subprocess.run(['notify-send', "Yikes YTD", status_msg], check=False))
         
         # Auto-Process Next (Thread)
         if getattr(self, "is_processing_queue", False):
@@ -1585,8 +1715,8 @@ class YikesApp(ctk.CTk):
         self.after(0, lambda: save_history(entry))
         self.after(0, lambda: self.update_history_ui())
         
-        # Notification
-        if current_settings.get("notifications", True):
+        # Platform-Aware Notification (Linux only)
+        if current_settings.get("notifications", True) and sys.platform.startswith('linux'):
              self.after(0, lambda: subprocess.run(['notify-send', "Yikes YTD", "Playlist Download Complete!"], check=False))
         
         # Auto-Process Next (GUI Callback)
@@ -1673,8 +1803,8 @@ class YikesApp(ctk.CTk):
         save_history(entry) # Synchronous save is fine
         self.after(0, lambda: self.update_history_ui())
         
-        # Notification
-        if current_settings.get("notifications", True):
+        # Platform-Aware Notification (Linux only)
+        if current_settings.get("notifications", True) and sys.platform.startswith('linux'):
              self.after(0, lambda: subprocess.run(['notify-send', "Yikes YTD", "Download Complete!"], check=False))
         
         # Auto-Process Next
@@ -1812,8 +1942,8 @@ class YikesApp(ctk.CTk):
         self.update_queue_ui()
         
     def clear_queue_action(self):
-        if messagebox.askyesno("Confirm", "Clear all pending downloads?"):
-            get_queue().clear()
+        if self.show_blocking_confirm("Clear Queue", "Clear all pending downloads?", "Clear All", "Cancel", "danger"):
+            clear_queue()  # Use new function that persists the empty queue
             self.update_queue_ui()
 
     def update_history_ui(self):
@@ -1916,16 +2046,19 @@ class YikesApp(ctk.CTk):
                       command=lambda u=item.get('url'): self.redownload_action(u)).pack(side="left")
 
     def clear_history_action(self):
-        if messagebox.askyesno("Confirm", "Clear all download history?"):
+        if self.show_blocking_confirm("Clear History", "Clear all download history?", "Clear All", "Cancel", "danger"):
             os.remove("history.json") if os.path.exists("history.json") else None
             self.update_history_ui()
             
     def redownload_action(self, url):
         if not url: return
+        # Debounce: Ignore if already fetching
+        if getattr(self, 'is_fetching', False):
+            return
         self.select_frame("Download")
         self.url_entry.delete(0, tk.END)
         self.url_entry.insert(0, url)
-        # Optional: Auto check?
+        # Auto check
         self.check_link()
 
     def process_queue(self):
@@ -1980,7 +2113,7 @@ class YikesApp(ctk.CTk):
             self.cookies_entry.insert(0, f)
             
     def reset_settings_action(self):
-        if messagebox.askyesno("Reset", "Reset all settings to default values?"):
+        if self.show_blocking_confirm("Reset Settings", "Reset all settings to default values?", "Reset", "Cancel", "warning"):
             from logic.settings import DEFAULT_SETTINGS
             global current_settings
             current_settings = DEFAULT_SETTINGS.copy()
@@ -2104,8 +2237,37 @@ class YikesApp(ctk.CTk):
         self.show_notification("Theme Updated Successfully", type="success")
 
     def on_closing(self):
-        """Fade out animation on close"""
+        """Graceful shutdown with orphaned process cleanup"""
         try:
+            # Force cancel any in-progress downloads to stop yt-dlp gracefully
+            self.is_cancelled = True
+            
+            # Kill any orphaned yt-dlp or ffmpeg child processes
+            try:
+                import psutil
+                current_proc = psutil.Process()
+                children = current_proc.children(recursive=True)
+                for child in children:
+                    child_name = child.name().lower()
+                    if 'yt-dlp' in child_name or 'ffmpeg' in child_name or 'ffprobe' in child_name:
+                        logging.info(f"Terminating orphaned child process: {child.pid} ({child_name})")
+                        child.terminate()
+                # Give them a moment to terminate gracefully
+                _, still_alive = psutil.wait_procs(children, timeout=2)
+                for alive in still_alive:
+                    logging.warning(f"Force-killing stubborn process: {alive.pid}")
+                    alive.kill()
+            except ImportError:
+                # psutil not available, try basic cleanup
+                pass
+            except Exception as e:
+                logging.warning(f"Process cleanup failed: {e}")
+            
+            # Shutdown executor
+            if hasattr(self, 'executor'):
+                self.executor.shutdown(wait=False, cancel_futures=True)
+            
+            # Fade out animation
             alpha = self.attributes("-alpha")
             if alpha > 0:
                 alpha -= 0.15 # Fast fade
@@ -2156,37 +2318,176 @@ class YikesApp(ctk.CTk):
 
 
     def show_notification(self, message, type="info"):
-        """Displays a modern, non-blocking toast notification overlay."""
+        """Displays a modern, animated toast notification overlay."""
         # 1. Clear previous
         if hasattr(self, "current_notification") and self.current_notification:
             try: self.current_notification.destroy()
             except: pass
             
-        # 2. Config
+        # 2. Config with expanded types
         colors = {
-            "success": "#2CC985", # Vivid Green
-            "error": "#FF5555",   # Soft Red
+            "success": "#2CC985",  # Vivid Green
+            "error": "#FF5555",    # Soft Red
+            "warning": "#FFA500",  # Orange
             "info": self.accent_color
         }
+        icons = {
+            "success": "✔",
+            "error": "✖",
+            "warning": "⚠",
+            "info": "ℹ"
+        }
         color = colors.get(type, self.accent_color)
+        icon = icons.get(type, "ℹ")
         
-        # 3. Create Container (Pill Shape)
-        # Placed at bottom center
-        toast = ctk.CTkFrame(self, fg_color=color, corner_radius=20, height=40)
-        toast.place(relx=0.5, rely=0.92, anchor="center") 
+        # 3. Create Container (Modern Pill Shape with subtle shadow)
+        toast = ctk.CTkFrame(self, fg_color=color, corner_radius=25, 
+                             border_width=1, border_color="gray30")
         
-        # 4. Content
-        icon = "✔" if type == "success" else "ℹ" if type == "info" else "!"
-        ctk.CTkLabel(toast, text=f"{icon}  {message}", text_color="white", font=("Comfortaa", 13, "bold")).pack(padx=20, pady=8)
+        # 4. Content with padding
+        content = ctk.CTkFrame(toast, fg_color="transparent")
+        content.pack(padx=20, pady=10)
         
-        # 5. Store & Auto-Hide
+        ctk.CTkLabel(content, text=icon, text_color="white", 
+                     font=("Segoe UI Emoji", 16)).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(content, text=message, text_color="white", 
+                     font=("Comfortaa", 13, "bold")).pack(side="left")
+        
+        # 5. Animate slide-in from bottom
+        toast.place(relx=0.5, rely=1.1, anchor="center")  # Start off-screen
         self.current_notification = toast
         
+        def slide_in(current_rely=1.1):
+            if current_rely > 0.92:
+                toast.place(relx=0.5, rely=current_rely - 0.03, anchor="center")
+                self.after(15, lambda: slide_in(current_rely - 0.03))
+        
+        self.after(10, slide_in)
+        
+        # 6. Auto-hide after delay
         def hide():
             if toast.winfo_exists():
                 toast.destroy()
         
-        self.after(3000, hide)
+        self.after(3500, hide)
+
+    def show_confirm_dialog(self, title, message, confirm_text="Confirm", cancel_text="Cancel", 
+                            dialog_type="warning", on_confirm=None, on_cancel=None):
+        """
+        Modern confirmation dialog that replaces tkinter.messagebox.askyesno.
+        Returns immediately. Actions are handled via callbacks.
+        """
+        # Create overlay background (semi-transparent)
+        overlay = ctk.CTkFrame(self, fg_color="black")
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        overlay.configure(fg_color=("gray20", "gray10"))  # Darker for modal feel
+        
+        # Dialog container (modern card)
+        dialog = ctk.CTkFrame(overlay, fg_color=self.bg_color, corner_radius=16, border_width=1, border_color="gray40")
+        dialog.place(relx=0.5, rely=0.5, anchor="center")
+        dialog.configure(width=400, height=200)
+        
+        # Header with icon
+        header = ctk.CTkFrame(dialog, fg_color="transparent", height=60)
+        header.pack(fill="x", padx=20, pady=(20, 10))
+        
+        # Icon based on type
+        icons = {
+            "warning": ("⚠️", "#FFA500"),
+            "danger": ("🗑️", "#FF5555"),
+            "info": ("ℹ️", self.accent_color),
+            "question": ("❓", self.accent_color)
+        }
+        icon, icon_color = icons.get(dialog_type, ("❓", self.accent_color))
+        
+        icon_label = ctk.CTkLabel(header, text=icon, font=("Segoe UI Emoji", 32), text_color=icon_color)
+        icon_label.pack(side="left", padx=(0, 15))
+        
+        title_label = ctk.CTkLabel(header, text=title, font=("Comfortaa", 18, "bold"), 
+                                   text_color=self.text_color, anchor="w")
+        title_label.pack(side="left", fill="x", expand=True)
+        
+        # Message
+        msg_label = ctk.CTkLabel(dialog, text=message, font=("Comfortaa", 13), 
+                                  text_color="gray60", wraplength=350, justify="left")
+        msg_label.pack(fill="x", padx=25, pady=(0, 20))
+        
+        # Button row
+        btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(0, 20))
+        
+        result = [None]  # Mutable container for result
+        
+        def close_dialog(confirmed):
+            result[0] = confirmed
+            overlay.destroy()
+            if confirmed and on_confirm:
+                on_confirm()
+            elif not confirmed and on_cancel:
+                on_cancel()
+        
+        # Cancel button (left, outline style)
+        cancel_btn = ctk.CTkButton(
+            btn_row, text=cancel_text, width=120, height=36,
+            fg_color="transparent", border_width=1, border_color=self.accent_color,
+            text_color=self.text_color, hover_color=self.hover_color,
+            font=("Comfortaa", 12, "bold"),
+            command=lambda: close_dialog(False)
+        )
+        cancel_btn.pack(side="left", padx=(0, 10))
+        
+        # Confirm button (right, filled style)
+        confirm_color = "#FF5555" if dialog_type == "danger" else self.accent_color
+        confirm_btn = ctk.CTkButton(
+            btn_row, text=confirm_text, width=120, height=36,
+            fg_color=confirm_color, text_color="white",
+            hover_color="#CC4444" if dialog_type == "danger" else self.hover_color,
+            font=("Comfortaa", 12, "bold"),
+            command=lambda: close_dialog(True)
+        )
+        confirm_btn.pack(side="right")
+        
+        # Keyboard bindings
+        dialog.bind("<Return>", lambda e: close_dialog(True))
+        dialog.bind("<Escape>", lambda e: close_dialog(False))
+        dialog.focus_set()
+        
+        # Click outside to cancel
+        overlay.bind("<Button-1>", lambda e: close_dialog(False) if e.widget == overlay else None)
+        
+        return result  # For synchronous checks if needed
+    
+    def show_blocking_confirm(self, title, message, confirm_text="Yes", cancel_text="No", 
+                               dialog_type="warning"):
+        """
+        Blocking confirmation dialog that waits for user response.
+        Use this as a direct replacement for messagebox.askyesno.
+        Returns True/False.
+        """
+        result = [None]
+        dialog_closed = threading.Event()
+        
+        def on_confirm():
+            result[0] = True
+            dialog_closed.set()
+        
+        def on_cancel():
+            result[0] = False
+            dialog_closed.set()
+        
+        # Create dialog
+        self.show_confirm_dialog(
+            title, message, confirm_text, cancel_text, 
+            dialog_type, on_confirm, on_cancel
+        )
+        
+        # Wait for dialog to close (tkinter-safe blocking)
+        while not dialog_closed.is_set():
+            self.update()
+            self.update_idletasks()
+            time.sleep(0.01)
+        
+        return result[0]
 
     def play_video(self):
         path = current_settings["download_path"]

@@ -11,3 +11,4 @@ history.json
 settings.json
 *.zip
 .DS_Store
+queue.json
